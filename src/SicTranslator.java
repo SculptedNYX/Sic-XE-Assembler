@@ -7,10 +7,10 @@ import java.util.Scanner;
 public class SicTranslator {
     private String programLen;
     private File rawFile;
-    private final File passOneFile = new File("./passOne.txt");
-    private final File symbolTable = new File("./symbolTable.txt");
-    private final File passTwoFile = new File("./passTwo.txt");
-    private final File HTERecord = new File("./HTERecord.txt");
+    private final File passOneFile = new File("../../../src/passOne.txt");
+    private final File symbolTable = new File("../../../src/symbolTable.txt");
+    private final File passTwoFile = new File("../../../src/passTwo.txt");
+    private final File HTERecord = new File("../../../src/HTERecord.txt");
 
 
     // Gets the file and checks its existence
@@ -73,6 +73,18 @@ public class SicTranslator {
         return hex;
     }
 
+    private String instructionSize(String inst) {
+        if (inst.contains("+")) {
+            return "4";
+        }
+        try {
+            return Converter.OPTAB.get(inst)[0];
+        } catch (NullPointerException ignored) {
+            return "0";
+        }
+        // System.out.println(inst);
+    }
+
     public void passOne(){
         String additionAddr;
         String startAddr;
@@ -87,7 +99,7 @@ public class SicTranslator {
 
             // Recognize Starting address
             String instruction = rawInputReader.nextLine();
-            if(Objects.equals(instruction.split(" ")[1], "Start")){
+            if(Objects.equals(instruction.split(" ")[1].toUpperCase(), "START")){
                 currentAddress = instruction.split(" ")[2];
                 startAddr = currentAddress;
                 passOneWriter.println(instruction);
@@ -108,7 +120,7 @@ public class SicTranslator {
                 if(splitInstruction.length > 2){
                     symbolTableWriter.println(splitInstruction[0] + " " + currentAddress);
                     // Checks if the labels are memory reservations
-                    switch (splitInstruction[1]){
+                    switch (splitInstruction[1].toUpperCase()){
                         case "RESW":
                             additionAddr = Integer.toHexString(3*Integer.parseInt(splitInstruction[2]));
                             break;
@@ -125,9 +137,16 @@ public class SicTranslator {
                                 additionAddr = Integer.toHexString((targetByte.toCharArray().length-3)/2);
                                 break;
                             }
+                        case "WORD":
+                            break;
                         default:
+                            additionAddr = instructionSize(splitInstruction[1]);
                             break;
                     }
+                }
+                // Checks format of the instruction incase it wasnt a reservation
+                else {
+                    additionAddr = instructionSize(splitInstruction[0]);
                 }
                 // If there is no more lines make sure to save the program length
                 if(!rawInputReader.hasNextLine()){

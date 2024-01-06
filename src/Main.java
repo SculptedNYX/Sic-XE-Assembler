@@ -14,9 +14,9 @@ public class Main {
         // #_| """ |_|"""""|_|"""""|_|"""""|_|"""""|_|"""""|_|"""""| #
         // #"`-0-0-'"`-0-0-'"`-0-0-'"`-0-0-'"`-0-0-'"`-0-0-'"`-0-0-' #
         // ###########################################################
-        SicTranslator sicCode = new SicTranslator("./sicIN.txt");
+        SicTranslator sicCode = new SicTranslator("../../../src/test.txt");
         sicCode.passOne();
-        sicCode.passTwo();
-        sicCode.HTERecord();
+        //sicCode.passTwo();
+        //sicCode.HTERecord();
     }
 }
