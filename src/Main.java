@@ -17,6 +17,6 @@ public class Main {
         SicTranslator sicCode = new SicTranslator("../../../src/"+args[0]);
         sicCode.passOne();
         sicCode.passTwo();
-        //sicCode.HTERecord();
+        sicCode.HTERecord();
     }
 }

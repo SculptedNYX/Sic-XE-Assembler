@@ -13,6 +13,7 @@ public class SicTranslator {
     private final File HTERecord = new File("../../../src/HTERecord.txt");
     private Map<String, String> symbolMap;
     private String base;
+    private String modString = "";
 
     // Gets the file and checks its existence
     public SicTranslator(String inputFileName)
@@ -76,7 +77,7 @@ public class SicTranslator {
             hex = hex.substring(1);
         }
         StringBuilder hexBuilder = new StringBuilder(hex);
-        while (hexBuilder.length() != padding) {
+        while (hexBuilder.length() < padding) {
             hexBuilder.insert(0, pad);
         }
         hex = hexBuilder.toString();
@@ -98,11 +99,23 @@ public class SicTranslator {
     private String binaryToHex(String binary) {
         return Integer.toString(Integer.parseInt(binary, 2), 16);
     }
+    
+    private String indirect(String ref) {
+        ref = symbolMap.get(ref);
+        for (Map.Entry<String, String> entry : symbolMap.entrySet()) {
+            if (ref.equals(entry.getValue())){
+                ref = entry.getKey();
+                break;
+            }
+        }
+        return symbolMap.get(ref);
+    }
 
     private String instToObjCode(String inst, String ref, String currentAddr) {
         String n = "1", i = "1", x = "0", b = "0", p = "0", e = "0";
         String format, opCode;
         boolean immediate = false;
+         
         try {
             if (inst.contains("+")){
                 format = "4";
@@ -138,8 +151,12 @@ public class SicTranslator {
                 String addr = "000";
                 try {
                     if (immediate) {
-                        return stringPadding(hexAddition(opCode, binaryToHex((n+i))), 2) + binaryToHex((x+b+p+e)).toUpperCase() + ref;
+                        if (symbolMap.containsKey(ref)){
+                            ref = symbolMap.get(ref);
+                        }
+                        return stringPadding(hexAddition(opCode, binaryToHex((n+i))), 2) + binaryToHex((x+b+p+e)).toUpperCase() + stringPadding(ref, 3);
                     }
+
                     int disp = Integer.parseInt(symbolMap.get(ref), 16) - Integer.parseInt(hexAddition(currentAddr, format), 16);
                     if (-2048 <= disp && disp <= 2047){
                         p = "1";
@@ -165,25 +182,46 @@ public class SicTranslator {
                     return objCode;
                 }
             case "4":
+                modString = modString + stringPadding(hexAddition(currentAddr, "1"), 4) +".05\nM^";
                 e = "1";
                 if (immediate) {
-                    return stringPadding(hexAddition(opCode, binaryToHex((n+i))), 2) + binaryToHex((x+b+p+e)).toUpperCase() + ref;
+                    if (symbolMap.containsKey(ref)){
+                        ref = symbolMap.get(ref);
+                    }
+                    return stringPadding(hexAddition(opCode, binaryToHex((n+i))), 2) + binaryToHex((x+b+p+e)).toUpperCase() + stringPadding(ref, 5);
                 }
                 objCode = stringPadding(hexAddition(opCode, binaryToHex((n+i))), 2) + binaryToHex((x+b+p+e)) + stringPadding(symbolMap.get(ref), 5);
                 return objCode;
             case "2":
                 String[] r = ref.split(",");
                 if (r.length == 1) {
-                    return opCode + r[0];
+                    return opCode + registerToHex(r[0]);
                 }
                 else {
-                    return opCode + r[0] + r[1];
+                    return opCode + registerToHex(r[0]) + registerToHex(r[1]);
                 }
             case "1":
                 return opCode;
             default:
                 return "No obj. Code";
         }
+    }
+    
+    public static String registerToHex(String r) {
+       switch (r) {
+            case"A":
+                return "0";
+            case"X":
+                return "1";
+            case"L":
+                return "2";
+            case"PC":
+                return "8";
+            case"SW":
+                return "9";
+            default:
+                return r;
+       } 
     }
 
     public void passOne(){
@@ -380,6 +418,7 @@ public class SicTranslator {
 
                 // Checks if a T record start or continuation is valid
                 if(!(instruction.contains("RESW") || instruction.contains("RESB")) && counter<10){
+                    if(instruction.contains("code")){continue;}
                     // If in a T record increment obj counter and add the objCode to the string
                     if(inRecord){
                         counter++;
@@ -397,7 +436,11 @@ public class SicTranslator {
                 else {
                     // Adds obj codes with their lengths
                     if(objCodes.toString().split(" ").length-1 != 0){
-                        HTEWriter.print("^"+stringPadding(Integer.toHexString((objCodes.toString().split(" ").length-1)*3), 2)+"^"+ objCodes);
+                        int length = 0;
+                        for (String code: objCodes.toString().split(" ")) {
+                            length += code.length()/2;
+                        }
+                        HTEWriter.print("^"+stringPadding(Integer.toHexString(length), 2)+"^"+ objCodes);
                     }
                     // This is important to not lose the opj code when exiting on counter condition
                     if(counter>=10){
@@ -414,9 +457,16 @@ public class SicTranslator {
                 }
             }
             if(objCodes.length() > 0){
-                HTEWriter.print("^"+stringPadding(Integer.toHexString((objCodes.toString().split(" ").length-1)*3), 2)+"^"+ objCodes);
+                int length = 0;
+                for (String code: objCodes.toString().split(" ")) {
+                    length += code.length()/3;
+                }
+                HTEWriter.print("^"+stringPadding(Integer.toHexString(length), 2)+"^"+ objCodes);
             }
-            HTEWriter.print("\nE^"+ programStart);
+            if(modString.length() > 0){
+                HTEWriter.print("\nM^"+modString);
+            }
+            HTEWriter.print("E^"+ programStart);
             HTEWriter.close();
         }catch (IOException ignored){
 
