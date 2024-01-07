@@ -11,7 +11,8 @@ public class SicTranslator {
     private final File symbolTable = new File("../../../src/symbolTable.txt");
     private final File passTwoFile = new File("../../../src/passTwo.txt");
     private final File HTERecord = new File("../../../src/HTERecord.txt");
-
+    private Map<String, String> symbolMap;
+    private String base;
 
     // Gets the file and checks its existence
     public SicTranslator(String inputFileName)
@@ -66,9 +67,18 @@ public class SicTranslator {
 
     // Pads the hex value passed with padding*0s to the left
     private String stringPadding(String hex, int padding){
+        if (hex == null) {
+            return "1111";
+        }
+        String pad = "0";
+        if (hex.contains("-")){
+            pad = "F";
+            hex = hex.substring(1);
+        }
         StringBuilder hexBuilder = new StringBuilder(hex);
         while (hexBuilder.length() != padding) {
-            hexBuilder.insert(0, "0");}
+            hexBuilder.insert(0, pad);
+        }
         hex = hexBuilder.toString();
         return hex;
     }
@@ -83,6 +93,97 @@ public class SicTranslator {
             return "0";
         }
         // System.out.println(inst);
+    }
+    
+    private String binaryToHex(String binary) {
+        return Integer.toString(Integer.parseInt(binary, 2), 16);
+    }
+
+    private String instToObjCode(String inst, String ref, String currentAddr) {
+        String n = "1", i = "1", x = "0", b = "0", p = "0", e = "0";
+        String format, opCode;
+        boolean immediate = false;
+        try {
+            if (inst.contains("+")){
+                format = "4";
+                inst = inst.substring(1);
+                opCode = Converter.OPTAB.get(inst)[1];
+            }
+            else {
+                format = Converter.OPTAB.get(inst)[0];
+                opCode = Converter.OPTAB.get(inst)[1];
+            }
+        } catch (Exception ex) {
+            return "No obj. code";
+        }
+
+        String objCode = "0";
+
+        if (ref.contains("#")) {
+            n = "0";
+            ref = ref.substring(1);
+            immediate = true;
+        }
+        else if (ref.contains("@")) {
+            i = "0";
+            ref = ref.substring(1);
+        }
+        if (ref.contains(",X")) {
+            x = "1";
+            ref = ref.replace(",X", "");
+        }
+        
+        switch (format) {
+            case "3":
+                String addr = "000";
+                try {
+                    if (immediate) {
+                        return stringPadding(hexAddition(opCode, binaryToHex((n+i))), 2) + binaryToHex((x+b+p+e)).toUpperCase() + ref;
+                    }
+                    int disp = Integer.parseInt(symbolMap.get(ref), 16) - Integer.parseInt(hexAddition(currentAddr, format), 16);
+                    if (-2048 <= disp && disp <= 2047){
+                        p = "1";
+                        if (disp < 0){
+                            addr = (Integer.toHexString(disp)).toUpperCase();
+                            addr = "-" + addr.replace("F", "");
+                        }
+                        else {
+                            addr = Integer.toString(disp, 16);
+                        }
+                        addr = stringPadding(addr, 3);
+                    }
+                    else {
+                        b = "1";
+                        disp = Integer.parseInt(symbolMap.get(ref), 16) - Integer.parseInt(this.base, 16);
+                        addr = Integer.toString(disp, 16);
+                        addr = stringPadding(addr, 3);
+                    }
+                    objCode = stringPadding(hexAddition(opCode, binaryToHex((n+i))), 2) + binaryToHex((x+b+p+e)).toUpperCase() + addr.toUpperCase();
+                    return objCode;
+                } catch (Exception ignored) {
+                    objCode = stringPadding(hexAddition(opCode, binaryToHex((n+i))), 2) + binaryToHex((x+b+p+e)).toUpperCase() + "000";
+                    return objCode;
+                }
+            case "4":
+                e = "1";
+                if (immediate) {
+                    return stringPadding(hexAddition(opCode, binaryToHex((n+i))), 2) + binaryToHex((x+b+p+e)).toUpperCase() + ref;
+                }
+                objCode = stringPadding(hexAddition(opCode, binaryToHex((n+i))), 2) + binaryToHex((x+b+p+e)) + stringPadding(symbolMap.get(ref), 5);
+                return objCode;
+            case "2":
+                String[] r = ref.split(",");
+                if (r.length == 1) {
+                    return opCode + r[0];
+                }
+                else {
+                    return opCode + r[0] + r[1];
+                }
+            case "1":
+                return opCode;
+            default:
+                return "No obj. Code";
+        }
     }
 
     public void passOne(){
@@ -117,6 +218,7 @@ public class SicTranslator {
                 // Calculate if there are any special cases for addresses
                 // Resolves labels
                 String[] splitInstruction = instruction.split(" ");
+
                 if(splitInstruction.length > 2){
                     symbolTableWriter.println(splitInstruction[0] + " " + currentAddress);
                     // Checks if the labels are memory reservations
@@ -171,7 +273,7 @@ public class SicTranslator {
     public void passTwo()
     {
         // Generates symbol map
-        Map<String, String> symbolMap = symbolTableToMap();
+        symbolMap = symbolTableToMap();
         if(symbolMap == null){
             System.out.println("Error in symbol conversion, pass two has occurred");
             return;
@@ -190,72 +292,62 @@ public class SicTranslator {
                 instruction = passOneReader.nextLine();
                 String[] splitInstruction = instruction.split(" ");
                 String opCodeAddr;
+                
+                if (instruction.contains("BASE")) {
+                    String baseAddr = splitInstruction[splitInstruction.length-1];
+                    if (baseAddr.contains("#")) {
+                        baseAddr = baseAddr.substring(1);
+                        this.base = baseAddr;
+                    }
+                    else if (baseAddr.contains("@")) {
+                        baseAddr = baseAddr.substring(1);
+                        this.base = symbolMap.get(baseAddr);
+                    }
+                    else if (baseAddr.contains(",X")) {
+                        baseAddr = baseAddr.replace(",X", "");
+                        this.base = symbolMap.get(baseAddr);
+                    }
+                    else {
+                        this.base = symbolMap.get(baseAddr);
+                    }
+                }
 
                 // Recognizes labels
-                if(splitInstruction.length > 3){
-                    if(Objects.equals(splitInstruction[2], "RESW") || Objects.equals(splitInstruction[2], "RESB")){
-                        passTwoWriter.println(instruction + " " + "No obj. code");
+                if(splitInstruction.length == 4){
+                    switch (splitInstruction[2].toUpperCase()) {
+                        case "RESW":
+                        case "RESB":
+                            passTwoWriter.println(instruction + " " + "No obj. code");
+                            break;
+                        case "WORD":
+                            opCodeAddr = Integer.toHexString(Integer.parseInt(splitInstruction[3]));
+                            opCodeAddr = stringPadding(opCodeAddr, 6);
+                            passTwoWriter.println(instruction + " " + opCodeAddr);
+                            break;
+                        case "BYTE":
+                            String value = splitInstruction[3];
+                            if(value.contains("C'")){
+                                value = value.substring(2, value.length() - 1);
+                                value = lettersToHex(value);
+                            }
+                            else {
+                                value = value.substring(2, value.length() - 1);
+                            }
+                            value = stringPadding(value, 6);
+                            passTwoWriter.println(instruction + " " + value);
+                            break;
+                        default:
+                            passTwoWriter.println(instruction + " " + instToObjCode(splitInstruction[2], splitInstruction[3], splitInstruction[0]));
+                            break;
                     }
-                    // Process object codes for memory
-                    else if(Objects.equals(splitInstruction[2], "WORD")){
-                        opCodeAddr = Integer.toHexString(Integer.parseInt(splitInstruction[3]));
-                        opCodeAddr = stringPadding(opCodeAddr, 6);
-                        passTwoWriter.println(instruction + " " + opCodeAddr);
-                    }
-                    else if (Objects.equals(splitInstruction[2], "BYTE")){
-                        String value = splitInstruction[3];
-                        if(value.contains("C'")){
-                            value = value.substring(2, value.length() - 1);
-                            value = lettersToHex(value);
-                        }
-                        else {
-                            value = value.substring(2, value.length() - 1);
-                        }
-                        value = stringPadding(value, 6);
-                        passTwoWriter.println(instruction + " " + value);
-                    }
-                    else {
-                        String finalAddr;
-                        // Checks addressing mode and finds address
-                        if(splitInstruction[3].contains(",X")){
-                            finalAddr = splitInstruction[3].replace(",X", "");
-                            finalAddr = symbolMap.get(finalAddr);
-                            finalAddr = hexAddition(finalAddr, "1");
-                        }
-                        else {
-                            finalAddr = symbolMap.get(splitInstruction[3]);
-                        }
-
-                        opCodeAddr = splitInstruction[2];
-                        try{
-                            passTwoWriter.println(instruction + " " + (Converter.OPTAB.get(opCodeAddr)[1]) + stringPadding(finalAddr,4));
-                        }
-                        catch (Exception ignored){
-
-                        }
-                    }
-
                 }
-                else {
-                    String finalAddr;
-                    if(splitInstruction[2].contains(",X")){
-                        finalAddr = splitInstruction[2].replace(",X", "");
-                        finalAddr = symbolMap.get(finalAddr);
-                        finalAddr = hexAddition(finalAddr, "1");
-                    }
-                    else {
-                        finalAddr = symbolMap.get(splitInstruction[2]);
-                    }
-                    opCodeAddr = splitInstruction[1];
-                    try{
-                        passTwoWriter.println(instruction+ " " + Converter.OPTAB.get(opCodeAddr)[1]+ stringPadding(finalAddr,4));
-                    }
-                    catch (Exception ignored){
-
-                    }
+                else if (splitInstruction.length == 3) {
+                    passTwoWriter.println(instruction + " " + instToObjCode(splitInstruction[1], splitInstruction[2], splitInstruction[0]));
+                }
+                else{
+                    passTwoWriter.println(instruction + " " + instToObjCode(splitInstruction[1], "-", splitInstruction[0]));
                 }
             }
-
             // Closes read and write pipes
             passOneReader.close();
             passTwoWriter.close();
