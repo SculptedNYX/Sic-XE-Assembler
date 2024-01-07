@@ -182,7 +182,6 @@ public class SicTranslator {
                     return objCode;
                 }
             case "4":
-                modString = modString + stringPadding(hexAddition(currentAddr, "1"), 4) +".05\nM^";
                 e = "1";
                 if (immediate) {
                     if (symbolMap.containsKey(ref)){
@@ -190,6 +189,7 @@ public class SicTranslator {
                     }
                     return stringPadding(hexAddition(opCode, binaryToHex((n+i))), 2) + binaryToHex((x+b+p+e)).toUpperCase() + stringPadding(ref, 5);
                 }
+                modString = modString + stringPadding(hexAddition(currentAddr, "1"), 4) +".05\nM^";
                 objCode = stringPadding(hexAddition(opCode, binaryToHex((n+i))), 2) + binaryToHex((x+b+p+e)) + stringPadding(symbolMap.get(ref), 5);
                 return objCode;
             case "2":
